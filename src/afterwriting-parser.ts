@@ -360,7 +360,7 @@ export var parse = function (original_script: string, cfg: any, generate_html: b
         token.time = calculateDialogueDuration(textWithoutNotes);
         if (!cfg.print_notes) {
             token.text = textWithoutNotes;
-            if(token.text.trim().length == 0) token.ignore = true;
+            if(token.text.trim().length == 0 && token.text !== "  ") token.ignore = true;
         }
         result.lengthDialogue += token.time;
     }

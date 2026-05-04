@@ -90,6 +90,10 @@ const debug = {
   registerDebugConfigurationProvider: jest.fn(),
 }
 
+const extensions = {
+  getExtension: jest.fn(() => ({ extensionPath: "" })),
+}
+
 const commands = {
   executeCommand: jest.fn(),
   registerCommand: jest.fn(),
@@ -122,4 +126,5 @@ export {
   debug,
   commands,
   EventEmitter,
+  extensions,
 }
