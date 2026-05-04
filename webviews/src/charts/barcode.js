@@ -298,11 +298,11 @@ define(function (require) {
                 [0, headerHeight],
                 [width, height - footerHeight]
             ])
-            .on('brush', function () {
-                let extent = d3.event.selection;
+            .on('brush', function (event) {
+                let extent = event.selection;
                 if (extent) {
-                    if (d3.event.sourceEvent.type !== "brush" && !uipersistence.chartFreeSelection) {
-                        const d0 = d3.event.selection.map(x.invert);
+                    if (event.sourceEvent.type !== "brush" && !uipersistence.chartFreeSelection) {
+                        const d0 = event.selection.map(x.invert);
                         let snappedX0 = structurePositions[d3.bisectLeft(structurePositions, extent[0])];
                         let snappedX1 = structurePositions[d3.bisectLeft(structurePositions, extent[1])];
                         d3.select(this).call(brush.move, [snappedX0, snappedX1]);
@@ -395,8 +395,8 @@ define(function (require) {
                     selectionExists = false;
                 }
             })
-            .on('end', function () {
-                let extent = d3.event.selection;
+            .on('end', function (event) {
+                let extent = event.selection;
                 brushSelection = extent;
                 if (!extent) {
                     selectionRightFooter.attr("visibility", "collapse");
@@ -417,23 +417,8 @@ define(function (require) {
             .on('dblclick', doubleclick)
 
 
-        function eventToBrush() {
-            const new_click_event = new MouseEvent(d3.event.type, {
-                pageX: d3.event.pageX,
-                pageY: d3.event.pageY,
-                clientX: d3.event.clientX,
-                clientY: d3.event.clientY,
-                layerX: d3.event.layerX,
-                layerY: d3.event.layerY,
-                bubbles: true,
-                cancelable: true,
-                view: window
-            });
-            mouserect.node().dispatchEvent(new_click_event);
-        }
-
-        function doubleclick() {
-            var mouse = d3.mouse(this);
+        function doubleclick(event) {
+            var mouse = d3.pointer(event, this);
             if (config.revealLine)
                 config.revealLine(x.invert(mouse[0]));
         }
@@ -448,8 +433,8 @@ define(function (require) {
             mouseGhover.style("opacity", "1");
         }
 
-        function mousemove() {
-            var mouse = d3.mouse(this);
+        function mousemove(event) {
+            var mouse = d3.pointer(event, this);
             vis.select(".mouse-line")
                 .attr('x', mouse[0]);
             hover(x.invert(mouse[0]));

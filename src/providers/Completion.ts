@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
+import * as os from "os";
 import { parsedDocuments } from "../extension";
 import { getCharactersWhoSpokeBeforeLast, addForceSymbolToCharacter } from "../utils";
-import username = require("username");
 import { titlePageDisplay } from "../afterwriting-parser";
 var fontnames: any[];
 const fontFinder = require('font-finder');
-var userfullname: string;
+var userfullname: string = "";
 
 //Load fonts for autocomplete
 (async () => {
@@ -14,12 +14,14 @@ var userfullname: string;
 })();
 
 //Get user's full name for author autocomplete
-(async () => {
-	userfullname = await username();
-	if (userfullname.length > 0) {
-		userfullname = userfullname.charAt(0).toUpperCase() + userfullname.slice(1)
+try {
+	const u = os.userInfo().username;
+	if (u && u.length > 0) {
+		userfullname = u.charAt(0).toUpperCase() + u.slice(1);
 	}
-})();
+} catch {
+	// os.userInfo() throws on some platforms (e.g. unprivileged containers); leave userfullname empty.
+}
 
 function TimeofDayCompletion(input: string, addspace: boolean, sort: string): vscode.CompletionItem {
 	return {

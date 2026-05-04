@@ -20,9 +20,7 @@ export class Options {
     font: string;
     exportconfig: fountainconfig.ExportConfig;
 }
-var PDFDocument = require('pdfkit'),
-    //helper = require('../helpers'),
-    Blob = require('blob');
+var PDFDocument = require('pdfkit');
 
 var create_simplestream = function (filepath: string) {
     var simplestream: any = {
@@ -38,57 +36,47 @@ var create_simplestream = function (filepath: string) {
             this.chunks.push(chunk);
         },
         end: function () {
-            if (simplestream.filepath) {
-                var fsmodule = 'fs';
-                var fs = require(fsmodule); // bypass requirejs minification/optimization
-                var stream = fs.createWriteStream(simplestream.filepath, {
-                    encoding: "binary"
-                });
-                //stream.on('finish', this.callback());
-                stream.on('error', function (err: any) {
-                    if (err.code == "ENOENT") {
-                        vscode.window.showErrorMessage("Unable to export PDF! The specified location does not exist: " + err.path)
-                    }
-                    else if (err.code == "EPERM") {
-                        vscode.window.showErrorMessage("Unable to export PDF! You do not have the permission to write the specified file: " + err.path)
-                    }
-                    else {
-                        vscode.window.showErrorMessage(err.message);
-                    }
-                    console.log(err);
-                });
-                stream.on('finish', () => {
-                    let open = "Open";
-                    let reveal = "Reveal in File Explorer";
-                    if (process.platform == "darwin") reveal = "Reveal in Finder"
-                    vscode.window.showInformationMessage("Exported PDF Succesfully!", open, reveal).then(val => {
-                        switch (val) {
-                            case open: {
-                                openFile(simplestream.filepath);
-                                break;
-                            }
-                            case reveal: {
-                                revealFile(simplestream.filepath);
-                                break;
-                            }
+            var fsmodule = 'fs';
+            var fs = require(fsmodule); // bypass requirejs minification/optimization
+            var stream = fs.createWriteStream(simplestream.filepath, {
+                encoding: "binary"
+            });
+            stream.on('error', function (err: any) {
+                if (err.code == "ENOENT") {
+                    vscode.window.showErrorMessage("Unable to export PDF! The specified location does not exist: " + err.path)
+                }
+                else if (err.code == "EPERM") {
+                    vscode.window.showErrorMessage("Unable to export PDF! You do not have the permission to write the specified file: " + err.path)
+                }
+                else {
+                    vscode.window.showErrorMessage(err.message);
+                }
+                console.log(err);
+            });
+            stream.on('finish', () => {
+                let open = "Open";
+                let reveal = "Reveal in File Explorer";
+                if (process.platform == "darwin") reveal = "Reveal in Finder"
+                vscode.window.showInformationMessage("Exported PDF Succesfully!", open, reveal).then(val => {
+                    switch (val) {
+                        case open: {
+                            openFile(simplestream.filepath);
+                            break;
                         }
-                    })
+                        case reveal: {
+                            revealFile(simplestream.filepath);
+                            break;
+                        }
+                    }
                 })
+            })
 
-                stream.on('open', function () {
-                    simplestream.chunks.forEach(function (buffer: any) {
-                        stream.write(new Buffer(buffer.toString('base64'), 'base64'));
-                    });
-                    stream.end();
+            stream.on('open', function () {
+                simplestream.chunks.forEach(function (buffer: any) {
+                    stream.write(Buffer.from(buffer.toString('base64'), 'base64'));
                 });
-
-            } else {
-                simplestream.blob = new Blob(simplestream.chunks, {
-                    type: "application/pdf"
-                });
-                // simplestream.url = blobUtil.createObjectURL(this.blob);
-                this.callback(simplestream);
-            }
+                stream.end();
+            });
         }
     };
     return simplestream;
