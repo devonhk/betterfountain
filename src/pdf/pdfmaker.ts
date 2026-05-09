@@ -9,6 +9,7 @@ import { openFile, revealFile, trimCharacterExtension, wordToColor } from "../ut
 import * as he from 'he';
 import * as addTextbox from 'textbox-for-pdfkit';
 import { regex } from "../afterwriting-parser";
+import { parseInlineFormatting } from "./inline-formatting";
 import { Base64Encode } from "base64-stream";
 
 // import * as blobUtil from "blob-util";
@@ -135,31 +136,16 @@ async function initDoc(opts: Options) {
     doc.font('ScriptNormal');
     doc.fontSize(print.font_size || 12);
 
-    // convert points to inches for text
-    doc.reset_format = function () {
-        doc.format_state = {
-            bold: false,
-            italic: false,
-            underline: false,
-            override_color: null
-        };
-    };
-    doc.reset_format();
-    //var inner_text = doc.text;
     doc.simple_text = function () {
         doc.font('ScriptNormal');
         doc.text.apply(doc, arguments);
     };
     doc.format_text = function (text: string, x: number, y: number, options: any) {
-        var cache_current_state = doc.format_state;
-        doc.reset_format();
         doc.text2(text, x, y, options);
-        doc.format_state = cache_current_state;
     };
     doc.text2 = function (text: string, x: number, y: number, options: any) {
         options = options || {};
         var color = options.color || 'black';
-        color = doc.format_state.override_color ? doc.format_state.override_color : color;
 
         doc.fill(color);
 
@@ -188,82 +174,55 @@ async function initDoc(opts: Options) {
                 text = text.slice(0, match.index) + match[3] + text.slice(match.index + match[0].length);
             }
         }
-        var split_for_formatting = [];
-        //Split the text from the start (or from the previous link) until the current one
-        //"This is a link: google.com and this is after"
-        // |--------------|----------| - - - - - - - |
+        // Build chunks of (text, optional linkUrl) so each non-link span can be
+        // run through the inline-formatting parser independently. Link contents
+        // are intentionally NOT formatted (asterisks/underscores in URLs are
+        // literal).
+        type Chunk = { text: string; linkUrl?: string };
+        var chunks: Chunk[] = [];
         var prevlink = 0;
         for (let i = 0; i < links.length; i++) {
-            split_for_formatting.push(text.slice(prevlink, links[i].start));
-            split_for_formatting.push(text.slice(links[i].start, links[i].start + links[i].length));
+            chunks.push({ text: text.slice(prevlink, links[i].start) });
+            chunks.push({
+                text: text.slice(links[i].start, links[i].start + links[i].length),
+                linkUrl: links[i].url,
+            });
             prevlink = links[i].start + links[i].length;
         }
-        //...And then add whatever is left over
-        //"This is a link: google.com and this is after"
-        // | - - - - - - -| - - - - -|----------------|
         var leftover = text.slice(prevlink, text.length);
-        if (leftover) split_for_formatting.push(leftover);
+        if (leftover) chunks.push({ text: leftover });
 
-        //Further sub-split for bold, italic, underline, etc...
-        for (let i = 0; i < split_for_formatting.length; i++) {
-            var innersplit = split_for_formatting[i].split(/(\\\*)|(\*{1,3})|(\\?_)|(\[\[)|(\]\])/g).filter(function (a) {
-                return a;
-            });
-            split_for_formatting.splice(i, 1, ...innersplit);
-            i += innersplit.length - 1;
-        }
-
-        // var font_width = print.font_width;
+        var noteColor = (print.note && print.note.color) || '#000000';
         var textobjects = [];
-        var currentIndex = 0;
-        for (var i = 0; i < split_for_formatting.length; i++) {
-            var elem = split_for_formatting[i];
-            if (elem === '***') {
-                doc.format_state.italic = !doc.format_state.italic;
-                doc.format_state.bold = !doc.format_state.bold;
-            } else if (elem === '**') {
-                doc.format_state.bold = !doc.format_state.bold;
-            } else if (elem === '*') {
-                doc.format_state.italic = !doc.format_state.italic;
-            } else if (elem === '_') {
-                doc.format_state.underline = !doc.format_state.underline;
-            } else if (elem === '[[') {
-                doc.format_state.override_color = (print.note && print.note.color) || '#000000';
-            } else if (elem === ']]') {
-                doc.format_state.override_color = null;
-            } else {
+        for (const chunk of chunks) {
+            if (chunk.linkUrl) {
+                // Render link contents verbatim, underlined, no inline formatting.
+                textobjects.push({
+                    text: chunk.text,
+                    link: chunk.linkUrl,
+                    font: options.bold ? 'ScriptBold' : 'ScriptNormal',
+                    underline: true,
+                    color: color,
+                });
+                continue;
+            }
+            for (const seg of parseInlineFormatting(chunk.text)) {
                 let font = 'ScriptNormal';
-                if (doc.format_state.bold && doc.format_state.italic) {
+                if (seg.bold && seg.italic) {
                     font = 'ScriptBoldOblique';
-                } else if (doc.format_state.bold || options.bold) {
+                } else if (seg.bold || options.bold) {
                     font = 'ScriptBold';
-                } else if (doc.format_state.italic) {
+                } else if (seg.italic) {
                     font = 'ScriptOblique';
                 }
-                if (elem === '\\_' || elem === '\\*') {
-                    elem = elem.substr(1, 1);
-                }
-                var linkurl = undefined;
-                for (const link of links) {
-                    if (link.start <= currentIndex && currentIndex < link.start + link.length) {
-                        linkurl = link.url;
-                    }
-                }
                 textobjects.push({
-                    text: elem,
-                    link: linkurl,
+                    text: seg.text,
+                    link: undefined,
                     font: font,
-                    underline: linkurl || doc.format_state.underline,
-                    color: doc.format_state.override_color ? doc.format_state.override_color : color
+                    underline: seg.underline,
+                    color: seg.note ? noteColor : color,
                 });
             }
-            currentIndex += elem.length;
-            /*inner_text.call(doc, elem, x * 72, y * 72, {
-                underline: doc.format_state.underline,
-                lineBreak: options.line_break,
-                width: options.width * 72,
-                align: options.align
-            });*/
         }
         var width = options.width !== undefined ? options.width : print.page_width;
         addTextbox(textobjects, doc, x * 72, y * 72, width * 72, {
